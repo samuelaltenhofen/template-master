@@ -1,0 +1,86 @@
+name: Continous Delivery
+
+on:
+    push:
+        branches: [master]
+
+jobs:
+    # init:
+    #   runs-on: self-hosted
+    #   # runs-on: ubuntu-18.04
+
+    #   steps:
+    #     - name: Checkout
+    #       uses: actions/checkout@v2
+    #     - name: Dump github context
+    #       run: echo "$GITHUB_CONTEXT"
+    #       shell: bash
+    #       env:
+    #         GITHUB_CONTEXT: ${{ toJson(github) }}
+
+    build:
+        runs-on: self-hosted
+        # runs-on: ubuntu-18.04
+
+        # if: github.ref == 'refs/heads/master'
+    
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v2
+            - name: Set environment variables
+              run: |
+                  echo "IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/${GITHUB_REPOSITORY#*\/}:${{ github.sha }}" >> $GITHUB_ENV
+            - name: Dump environment variables
+              run: env
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v1
+            - name: Login to DockerHub
+              uses: docker/login-action@v1
+              with:
+                  username: ${{ secrets.DOCKERHUB_USERNAME }}
+                  password: ${{ secrets.DOCKERHUB_PASSWORD }}
+            - name: Build and push
+              id: docker_build
+              uses: docker/build-push-action@v2
+              with:
+                  context: .
+                  push: true
+                  tags: ${{ env.IMAGE }}
+            - name: Image digest
+              run: echo ${{ steps.docker_build.outputs.digest }}
+
+    deploy:
+        runs-on: self-hosted
+        # runs-on: ubuntu-18.04
+        needs: build
+        # Ainda não temos ambiente de staging na nova plataforma, por isso só dou deploy na master
+        # if: github.ref == 'refs/heads/master'
+
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v2
+              with:
+                  repository: ${{ secrets.DEPLOYMENT_REPO }}
+                  token: ${{ secrets.DEPLOYMENT_REPO_TOKEN }}
+            - name: Set workflow environment variables
+              run: |
+                  echo "APP_NAME=${GITHUB_REPOSITORY#*\/}" >> $GITHUB_ENV
+                  echo "TAG=${{ github.sha }}" >> $GITHUB_ENV
+                  echo "ENVIRONMENT=production" >> $GITHUB_ENV
+            - name: Set values.yaml path
+              run: |
+                  echo "VALUES_YAML=applications/$APP_NAME/$ENVIRONMENT/values.yaml" >> $GITHUB_ENV
+            - name: Dump workflow environment variables
+              run: env
+            - name: Update application image
+              run: |
+                  curl -Lso yq https://github.com/mikefarah/yq/releases/download/3.3.2/yq_linux_amd64
+                  chmod +x yq
+                  ./yq w -i ${VALUES_YAML} 'image.tag' "${TAG}"
+            - name: Commit files
+              run: |
+                  git config --local user.email "actions@github.com"
+                  git config --local user.name "GitHub Actions"
+                  git add "${VALUES_YAML}"
+                  git commit -m "chore(${APP_NAME}): bumping ${ENVIRONMENT} image tag"
+                  git push
