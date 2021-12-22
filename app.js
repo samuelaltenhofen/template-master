@@ -45,7 +45,7 @@ app.use(cors())
 database
     .connect()
     .then(() => {
-        models = require("@githubanotaai/models")()
+        
 
         const server = app.listen(app.get("port"), function () {
             console.log("servidor ligado porta " + app.get("port"))
@@ -55,8 +55,8 @@ database
         // healthcheck do Kubernetes
         app.get("/healthz", (req, res) => res.sendStatus(200))
 
-        var routes = require("./routes/auth/index")
-        app.use("/auth", routes)
+        // var routes = require("./routes/auth/index")
+        // app.use("/auth", routes)
 
         app.use(function (req, res, next) {
             res.status(404)
