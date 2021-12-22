@@ -43,7 +43,6 @@ app.use(cors())
 
 // VERIFICAR SE PRECISA REALMENTE DE CONEXAO COM BANCO DE DADOS
 database
-
     .connect()
     .then(() => {
         
